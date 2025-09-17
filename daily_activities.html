@@ -327,23 +327,99 @@
     </div>
 
     <script>
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzpwr1leYjRZml3ZOqcN6MQDv9WyMPLBFF7DKwGjPeHqegbiIYXfNl9HvezWbQ17B4Q/exec';
+        
         let activities = [];
         let lastResetDate = null;
 
-        // Načítať dáta zo storage
-        function loadData() {
-            const savedActivities = JSON.parse(localStorage.getItem('dailyActivities') || '[]');
-            const savedResetDate = localStorage.getItem('lastResetDate');
-            const today = new Date().toDateString();
-            
-            // Ak sa dátum zmenil, resetovať completed stav
-            if (savedResetDate !== today) {
-                activities = resetCompletedStatus(savedActivities);
+        // Načítať dáta zo Google Sheets
+        async function loadData() {
+            try {
+                // Načítať z Google Sheets
+                const response = await fetch(GOOGLE_SCRIPT_URL);
+                const sheetData = await response.json();
+                
+                // Spracovať dáta z Google Sheets
+                const today = new Date().toDateString();
+                const todayData = sheetData.filter(row => {
+                    if (row.length < 4) return false;
+                    const rowDate = new Date(row[0]).toDateString();
+                    return rowDate === today;
+                });
+                
+                // Vytvorenie základných aktivít ak neexistujú
+                activities = [
+                    { 
+                        id: 1, 
+                        text: 'Benco', 
+                        completed: false,
+                        subtasks: [
+                            { id: 11, text: 'Kliky 60', completed: false },
+                            { id: 12, text: 'Drepy 40', completed: false },
+                            { id: 13, text: 'Dychove cvicenie', completed: false },
+                            { id: 14, text: 'Volna aktivita', completed: false }
+                        ]
+                    },
+                    { 
+                        id: 2, 
+                        text: 'Mito', 
+                        completed: false,
+                        subtasks: [
+                            { id: 21, text: 'Kliky 60', completed: false },
+                            { id: 22, text: 'Drepy 40', completed: false },
+                            { id: 23, text: 'Dychove cvicenie', completed: false },
+                            { id: 24, text: 'Volna aktivita', completed: false }
+                        ]
+                    },
+                    { 
+                        id: 3, 
+                        text: 'Maco', 
+                        completed: false,
+                        subtasks: [
+                            { id: 31, text: 'Kliky 60', completed: false },
+                            { id: 32, text: 'Drepy 40', completed: false },
+                            { id: 33, text: 'Dychove cvicenie', completed: false },
+                            { id: 34, text: 'Volna aktivita', completed: false }
+                        ]
+                    }
+                ];
+                
+                // Aplikovať dnes dokončené aktivity z Google Sheets
+                todayData.forEach(row => {
+                    const osoba = row[1];
+                    const aktivita = row[2];
+                    const dokoncene = row[3] === 'Áno';
+                    
+                    if (!dokoncene) return;
+                    
+                    // Nájsť a označiť aktivitu ako dokončenú
+                    activities.forEach(activity => {
+                        if (activity.text === osoba) {
+                            activity.subtasks.forEach(subtask => {
+                                if (subtask.text === aktivita) {
+                                    subtask.completed = true;
+                                }
+                            });
+                        }
+                    });
+                });
+                
                 lastResetDate = today;
-                saveData();
-            } else {
-                activities = savedActivities;
-                lastResetDate = savedResetDate;
+            } catch (error) {
+                console.error('Chyba pri načítaní dát:', error);
+                // Fallback na lokálne dáta
+                const savedActivities = JSON.parse(localStorage.getItem('dailyActivities') || '[]');
+                const savedResetDate = localStorage.getItem('lastResetDate');
+                const today = new Date().toDateString();
+                
+                if (savedResetDate !== today) {
+                    activities = resetCompletedStatus(savedActivities);
+                    lastResetDate = today;
+                    saveData();
+                } else {
+                    activities = savedActivities;
+                    lastResetDate = savedResetDate;
+                }
             }
         }
 
@@ -356,6 +432,25 @@
                     completed: false
                 })) : []
             }));
+        }
+
+        // Uložiť do Google Sheets
+        async function saveToGoogleSheets(osoba, aktivita, dokoncene) {
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        osoba: osoba,
+                        aktivita: aktivita,
+                        dokoncene: dokoncene
+                    })
+                });
+            } catch (error) {
+                console.error('Chyba pri ukladaní do Google Sheets:', error);
+            }
         }
 
         // Uložiť dáta do storage
@@ -413,27 +508,46 @@
         }
 
         // Prepnúť stav aktivity
-        function toggleActivity(id, isSubtask = false, parentId = null) {
+        async function toggleActivity(id, isSubtask = false, parentId = null) {
+            let changedActivity = null;
+            let changedPerson = null;
+            
             if (isSubtask) {
                 activities = activities.map(activity => 
                     activity.id === parentId 
                         ? {
                             ...activity,
-                            subtasks: activity.subtasks.map(subtask =>
-                                subtask.id === id
-                                    ? { ...subtask, completed: !subtask.completed }
-                                    : subtask
-                            )
+                            subtasks: activity.subtasks.map(subtask => {
+                                if (subtask.id === id) {
+                                    changedActivity = subtask.text;
+                                    changedPerson = activity.text;
+                                    return { ...subtask, completed: !subtask.completed };
+                                }
+                                return subtask;
+                            })
                         }
                         : activity
                 );
             } else {
-                activities = activities.map(activity => 
-                    activity.id === id 
-                        ? { ...activity, completed: !activity.completed }
-                        : activity
-                );
+                activities = activities.map(activity => {
+                    if (activity.id === id) {
+                        changedActivity = activity.text + ' (hlavná aktivita)';
+                        changedPerson = activity.text;
+                        return { ...activity, completed: !activity.completed };
+                    }
+                    return activity;
+                });
             }
+            
+            // Uložiť do Google Sheets
+            if (changedActivity && changedPerson) {
+                const isCompleted = isSubtask 
+                    ? activities.find(a => a.id === parentId).subtasks.find(s => s.id === id).completed
+                    : activities.find(a => a.id === id).completed;
+                
+                await saveToGoogleSheets(changedPerson, changedActivity, isCompleted);
+            }
+            
             saveData();
             renderActivities();
         }
@@ -579,50 +693,55 @@
         setInterval(checkMidnightReset, 60000);
 
         // Inicializácia
-        loadData();
-        displayDate();
-        renderActivities();
-
-        // Pridať základné aktivity pri prvom spustení
-        if (activities.length === 0) {
-            activities = [
-                { 
-                    id: 1, 
-                    text: 'Benco', 
-                    completed: false,
-                    subtasks: [
-                        { id: 11, text: 'Kliky 60', completed: false },
-                        { id: 12, text: 'Drepy 40', completed: false },
-                        { id: 13, text: 'Dychove cvicenie', completed: false },
-                        { id: 14, text: 'Volna aktivita', completed: false }
-                    ]
-                },
-                { 
-                    id: 2, 
-                    text: 'Mito', 
-                    completed: false,
-                    subtasks: [
-                        { id: 21, text: 'Kliky 60', completed: false },
-                        { id: 22, text: 'Drepy 40', completed: false },
-                        { id: 23, text: 'Dychove cvicenie', completed: false },
-                        { id: 24, text: 'Volna aktivita', completed: false }
-                    ]
-                },
-                { 
-                    id: 3, 
-                    text: 'Maco', 
-                    completed: false,
-                    subtasks: [
-                        { id: 31, text: 'Kliky 60', completed: false },
-                        { id: 32, text: 'Drepy 40', completed: false },
-                        { id: 33, text: 'Dychove cvicenie', completed: false },
-                        { id: 34, text: 'Volna aktivita', completed: false }
-                    ]
-                }
-            ];
-            saveData();
+        async function init() {
+            await loadData();
+            displayDate();
             renderActivities();
+
+            // Pridať základné aktivity pri prvom spustení
+            if (activities.length === 0) {
+                activities = [
+                    { 
+                        id: 1, 
+                        text: 'Benco', 
+                        completed: false,
+                        subtasks: [
+                            { id: 11, text: 'Kliky 60', completed: false },
+                            { id: 12, text: 'Drepy 40', completed: false },
+                            { id: 13, text: 'Dychove cvicenie', completed: false },
+                            { id: 14, text: 'Volna aktivita', completed: false }
+                        ]
+                    },
+                    { 
+                        id: 2, 
+                        text: 'Mito', 
+                        completed: false,
+                        subtasks: [
+                            { id: 21, text: 'Kliky 60', completed: false },
+                            { id: 22, text: 'Drepy 40', completed: false },
+                            { id: 23, text: 'Dychove cvicenie', completed: false },
+                            { id: 24, text: 'Volna aktivita', completed: false }
+                        ]
+                    },
+                    { 
+                        id: 3, 
+                        text: 'Maco', 
+                        completed: false,
+                        subtasks: [
+                            { id: 31, text: 'Kliky 60', completed: false },
+                            { id: 32, text: 'Drepy 40', completed: false },
+                            { id: 33, text: 'Dychove cvicenie', completed: false },
+                            { id: 34, text: 'Volna aktivita', completed: false }
+                        ]
+                    }
+                ];
+                saveData();
+                renderActivities();
+            }
         }
+
+        // Spustiť inicializáciu
+        init();
     </script>
 </body>
 </html>
