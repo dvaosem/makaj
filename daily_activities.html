@@ -311,7 +311,6 @@
         <div class="add-activity">
             <input type="text" id="activityInput" placeholder="Pridať novú aktivitu..." maxlength="100">
             <button onclick="addActivity()">Pridať</button>
-            <button onclick="resetToDefault()" style="background: #ff4757; margin-left: 10px;">Reset</button>
         </div>
         
         <div class="activities-list" id="activitiesList">
@@ -375,51 +374,6 @@
                 day: 'numeric' 
             };
             document.getElementById('currentDate').textContent = today.toLocaleDateString('sk-SK', options);
-        }
-
-        // Reset na základné aktivity
-        function resetToDefault() {
-            if (confirm('Naozaj chcete resetovať všetky aktivity?')) {
-                localStorage.removeItem('dailyActivities');
-                localStorage.removeItem('lastResetDate');
-                activities = [
-                    { 
-                        id: 1, 
-                        text: 'Benco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 11, text: 'Kliky 60', completed: false },
-                            { id: 12, text: 'Drepy 40', completed: false },
-                            { id: 13, text: 'Dychove cvicenie', completed: false },
-                            { id: 14, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 2, 
-                        text: 'Mito', 
-                        completed: false,
-                        subtasks: [
-                            { id: 21, text: 'Kliky 60', completed: false },
-                            { id: 22, text: 'Drepy 40', completed: false },
-                            { id: 23, text: 'Dychove cvicenie', completed: false },
-                            { id: 24, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 3, 
-                        text: 'Maco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 31, text: 'Kliky 60', completed: false },
-                            { id: 32, text: 'Drepy 40', completed: false },
-                            { id: 33, text: 'Dychove cvicenie', completed: false },
-                            { id: 34, text: 'Volna aktivita', completed: false }
-                        ]
-                    }
-                ];
-                saveData();
-                renderActivities();
-            }
         }
 
         // Pridať novú aktivitu
@@ -631,7 +585,43 @@
 
         // Pridať základné aktivity pri prvom spustení
         if (activities.length === 0) {
-            resetToDefault();
+            activities = [
+                { 
+                    id: 1, 
+                    text: 'Benco', 
+                    completed: false,
+                    subtasks: [
+                        { id: 11, text: 'Kliky 60', completed: false },
+                        { id: 12, text: 'Drepy 40', completed: false },
+                        { id: 13, text: 'Dychove cvicenie', completed: false },
+                        { id: 14, text: 'Volna aktivita', completed: false }
+                    ]
+                },
+                { 
+                    id: 2, 
+                    text: 'Mito', 
+                    completed: false,
+                    subtasks: [
+                        { id: 21, text: 'Kliky 60', completed: false },
+                        { id: 22, text: 'Drepy 40', completed: false },
+                        { id: 23, text: 'Dychove cvicenie', completed: false },
+                        { id: 24, text: 'Volna aktivita', completed: false }
+                    ]
+                },
+                { 
+                    id: 3, 
+                    text: 'Maco', 
+                    completed: false,
+                    subtasks: [
+                        { id: 31, text: 'Kliky 60', completed: false },
+                        { id: 32, text: 'Drepy 40', completed: false },
+                        { id: 33, text: 'Dychove cvicenie', completed: false },
+                        { id: 34, text: 'Volna aktivita', completed: false }
+                    ]
+                }
+            ];
+            saveData();
+            renderActivities();
         }
     </script>
 </body>
