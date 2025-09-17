@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Denný zoznam aktivít</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.2em;
+        }
+        
+        .date {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .add-activity {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .add-activity input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+        
+        .add-activity input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .add-activity button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .add-activity button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .activities-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            background: white;
+            border-radius: 12px;
+            border: 2px solid #f0f0f0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .activity-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .activity-item.completed {
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+            border-color: #4CAF50;
+        }
+        
+        .activity-checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        .activity-item.completed .activity-checkbox {
+            background: #4CAF50;
+            border-color: #4CAF50;
+            color: white;
+        }
+        
+        .activity-text {
+            flex: 1;
+            font-size: 1.1em;
+            color: #333;
+            transition: all 0.3s ease;
+        }
+        
+        .activity-item.completed .activity-text {
+            text-decoration: line-through;
+            color: #666;
+        }
+        
+        .delete-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        .delete-btn:hover {
+            background: #ff3742;
+        }
+        
+        .stats {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            text-align: center;
+        }
+        
+        .reset-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 193, 7, 0.1);
+            border-left: 4px solid #ffc107;
+            border-radius: 0 8px 8px 0;
+            font-size: 0.9em;
+            color: #856404;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .add-activity {
+                flex-direction: column;
+            }
+            
+            h1 {
+                font-size: 1.8em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗓️ Denný zoznam aktivít</h1>
+            <div class="date" id="currentDate"></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        
+        <div class="add-activity">
+            <input type="text" id="activityInput" placeholder="Pridať novú aktivitu..." maxlength="100">
+            <button onclick="addActivity()">Pridať</button>
+        </div>
+        
+        <div class="activities-list" id="activitiesList">
+            <!-- Aktivity sa tu zobrazia -->
+        </div>
+        
+        <div class="stats">
+            <div id="statsText">Dokončené: 0/0 aktivít</div>
+        </div>
+        
+        <div class="reset-info">
+            ⏰ Všetky označenia sa automaticky vynulujú každý deň o polnoci
+        </div>
+    </div>
+
+    <script>
+        let activities = [];
+        let lastResetDate = null;
+
+        // Načítať dáta zo storage
+        function loadData() {
+            const savedActivities = JSON.parse(localStorage.getItem('dailyActivities') || '[]');
+            const savedResetDate = localStorage.getItem('lastResetDate');
+            const today = new Date().toDateString();
+            
+            // Ak sa dátum zmenil, resetovať completed stav
+            if (savedResetDate !== today) {
+                activities = savedActivities.map(activity => ({
+                    ...activity,
+                    completed: false
+                }));
+                lastResetDate = today;
+                saveData();
+            } else {
+                activities = savedActivities;
+                lastResetDate = savedResetDate;
+            }
+        }
+
+        // Uložiť dáta do storage
+        function saveData() {
+            localStorage.setItem('dailyActivities', JSON.stringify(activities));
+            localStorage.setItem('lastResetDate', lastResetDate);
+        }
+
+        // Zobraziť aktuálny dátum
+        function displayDate() {
+            const today = new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            document.getElementById('currentDate').textContent = today.toLocaleDateString('sk-SK', options);
+        }
+
+        // Pridať novú aktivitu
+        function addActivity() {
+            const input = document.getElementById('activityInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                activities.push({
+                    id: Date.now(),
+                    text: text,
+                    completed: false
+                });
+                input.value = '';
+                saveData();
+                renderActivities();
+            }
+        }
+
+        // Prepnúť stav aktivity
+        function toggleActivity(id) {
+            activities = activities.map(activity => 
+                activity.id === id 
+                    ? { ...activity, completed: !activity.completed }
+                    : activity
+            );
+            saveData();
+            renderActivities();
+        }
+
+        // Vymazať aktivitu
+        function deleteActivity(id) {
+            activities = activities.filter(activity => activity.id !== id);
+            saveData();
+            renderActivities();
+        }
+
+        // Vykresliť aktivity
+        function renderActivities() {
+            const list = document.getElementById('activitiesList');
+            const completed = activities.filter(a => a.completed).length;
+            const total = activities.length;
+            
+            list.innerHTML = activities.map(activity => `
+                <div class="activity-item ${activity.completed ? 'completed' : ''}" onclick="toggleActivity(${activity.id})">
+                    <div class="activity-checkbox">
+                        ${activity.completed ? '✓' : ''}
+                    </div>
+                    <div class="activity-text">${activity.text}</div>
+                    <button class="delete-btn" onclick="event.stopPropagation(); deleteActivity(${activity.id})">🗑️</button>
+                </div>
+            `).join('');
+            
+            // Aktualizovať progress bar a štatistiky
+            const progress = total > 0 ? (completed / total) * 100 : 0;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+            document.getElementById('statsText').textContent = `Dokončené: ${completed}/${total} aktivít`;
+        }
+
+        // Enter key support
+        document.getElementById('activityInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addActivity();
+            }
+        });
+
+        // Automatický reset o polnoci
+        function checkMidnightReset() {
+            const now = new Date();
+            const today = now.toDateString();
+            
+            if (lastResetDate !== today) {
+                activities = activities.map(activity => ({
+                    ...activity,
+                    completed: false
+                }));
+                lastResetDate = today;
+                saveData();
+                renderActivities();
+                displayDate();
+            }
+        }
+
+        // Kontrola každú minútu
+        setInterval(checkMidnightReset, 60000);
+
+        // Inicializácia
+        loadData();
+        displayDate();
+        renderActivities();
+
+        // Pridať základné aktivity pri prvom spustení
+        if (activities.length === 0) {
+            activities = [
+                { id: 1, text: 'Ranná hygiena', completed: false },
+                { id: 2, text: 'Zdravá raňajky', completed: false },
+                { id: 3, text: '30 minút cvičenia', completed: false },
+                { id: 4, text: 'Prečítať 20 strán knihy', completed: false },
+                { id: 5, text: 'Večerná prechádzka', completed: false }
+            ];
+            saveData();
+            renderActivities();
+        }
+    </script>
+</body>
+</html>
