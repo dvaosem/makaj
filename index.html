@@ -19,7 +19,7 @@
         }
         
         .container {
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
@@ -103,26 +103,54 @@
             gap: 15px;
         }
         
+        .activity-group {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
         .activity-item {
             display: flex;
             align-items: center;
             gap: 15px;
             padding: 15px 20px;
             background: white;
-            border-radius: 12px;
-            border: 2px solid #f0f0f0;
+            border-bottom: 1px solid #f0f0f0;
             transition: all 0.3s ease;
             cursor: pointer;
+            position: relative;
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
         }
         
         .activity-item:hover {
-            transform: translateX(5px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            background: #f8f9ff;
         }
         
         .activity-item.completed {
             background: linear-gradient(135deg, #d4edda, #c3e6cb);
-            border-color: #4CAF50;
+        }
+        
+        .activity-item.main-activity {
+            background: #f8f9ff;
+            border-bottom: 2px solid #667eea;
+            font-weight: 600;
+        }
+        
+        .activity-item.main-activity.completed {
+            background: linear-gradient(135deg, #c8e6c9, #a5d6a7);
+        }
+        
+        .activity-item.sub-activity {
+            padding-left: 50px;
+            background: #fafafa;
+            font-size: 0.95em;
+        }
+        
+        .activity-item.sub-activity.completed {
+            background: linear-gradient(135deg, #e8f5e8, #d4edda);
         }
         
         .activity-checkbox {
@@ -150,9 +178,34 @@
             transition: all 0.3s ease;
         }
         
+        .activity-item.sub-activity .activity-text {
+            font-size: 1em;
+        }
+        
         .activity-item.completed .activity-text {
             text-decoration: line-through;
             color: #666;
+        }
+        
+        .activity-actions {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        
+        .add-subtask-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.3s ease;
+        }
+        
+        .add-subtask-btn:hover {
+            background: #138496;
         }
         
         .delete-btn {
@@ -169,6 +222,32 @@
         
         .delete-btn:hover {
             background: #ff3742;
+        }
+        
+        .subtask-input {
+            display: none;
+            width: 100%;
+            padding: 15px 50px;
+            background: #f0f0f0;
+            border: none;
+            border-top: 1px solid #ddd;
+        }
+        
+        .subtask-input input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.95em;
+        }
+        
+        .subtask-input input:focus {
+            outline: none;
+            border-color: #17a2b8;
+        }
+        
+        .subtask-input.active {
+            display: block;
         }
         
         .stats {
@@ -189,6 +268,12 @@
             color: #856404;
         }
         
+        .sub-progress {
+            font-size: 0.8em;
+            color: #666;
+            margin-left: 10px;
+        }
+        
         @media (max-width: 480px) {
             .container {
                 padding: 20px;
@@ -201,6 +286,14 @@
             
             h1 {
                 font-size: 1.8em;
+            }
+            
+            .activity-item.sub-activity {
+                padding-left: 35px;
+            }
+            
+            .subtask-input {
+                padding-left: 35px;
             }
         }
     </style>
@@ -245,16 +338,24 @@
             
             // Ak sa dátum zmenil, resetovať completed stav
             if (savedResetDate !== today) {
-                activities = savedActivities.map(activity => ({
-                    ...activity,
-                    completed: false
-                }));
+                activities = resetCompletedStatus(savedActivities);
                 lastResetDate = today;
                 saveData();
             } else {
                 activities = savedActivities;
                 lastResetDate = savedResetDate;
             }
+        }
+
+        function resetCompletedStatus(activitiesArray) {
+            return activitiesArray.map(activity => ({
+                ...activity,
+                completed: false,
+                subtasks: activity.subtasks ? activity.subtasks.map(subtask => ({
+                    ...subtask,
+                    completed: false
+                })) : []
+            }));
         }
 
         // Uložiť dáta do storage
@@ -284,7 +385,8 @@
                 activities.push({
                     id: Date.now(),
                     text: text,
-                    completed: false
+                    completed: false,
+                    subtasks: []
                 });
                 input.value = '';
                 saveData();
@@ -292,44 +394,164 @@
             }
         }
 
-        // Prepnúť stav aktivity
-        function toggleActivity(id) {
+        // Pridať podúlohu
+        function addSubtask(parentId, subtaskText) {
             activities = activities.map(activity => 
-                activity.id === id 
-                    ? { ...activity, completed: !activity.completed }
+                activity.id === parentId 
+                    ? { 
+                        ...activity, 
+                        subtasks: [...(activity.subtasks || []), {
+                            id: Date.now(),
+                            text: subtaskText,
+                            completed: false
+                        }]
+                    }
                     : activity
             );
             saveData();
             renderActivities();
         }
 
-        // Vymazať aktivitu
-        function deleteActivity(id) {
-            activities = activities.filter(activity => activity.id !== id);
+        // Prepnúť stav aktivity
+        function toggleActivity(id, isSubtask = false, parentId = null) {
+            if (isSubtask) {
+                activities = activities.map(activity => 
+                    activity.id === parentId 
+                        ? {
+                            ...activity,
+                            subtasks: activity.subtasks.map(subtask =>
+                                subtask.id === id
+                                    ? { ...subtask, completed: !subtask.completed }
+                                    : subtask
+                            )
+                        }
+                        : activity
+                );
+            } else {
+                activities = activities.map(activity => 
+                    activity.id === id 
+                        ? { ...activity, completed: !activity.completed }
+                        : activity
+                );
+            }
             saveData();
             renderActivities();
+        }
+
+        // Vymazať aktivitu alebo podúlohu
+        function deleteItem(id, isSubtask = false, parentId = null) {
+            if (isSubtask) {
+                activities = activities.map(activity => 
+                    activity.id === parentId 
+                        ? {
+                            ...activity,
+                            subtasks: activity.subtasks.filter(subtask => subtask.id !== id)
+                        }
+                        : activity
+                );
+            } else {
+                activities = activities.filter(activity => activity.id !== id);
+            }
+            saveData();
+            renderActivities();
+        }
+
+        // Zobraziť/skryť input pre podúlohu
+        function toggleSubtaskInput(activityId) {
+            const input = document.getElementById(`subtask-input-${activityId}`);
+            const inputField = document.getElementById(`subtask-field-${activityId}`);
+            
+            if (input.classList.contains('active')) {
+                input.classList.remove('active');
+            } else {
+                // Skryť všetky ostatné inputy
+                document.querySelectorAll('.subtask-input').forEach(inp => inp.classList.remove('active'));
+                input.classList.add('active');
+                inputField.focus();
+            }
+        }
+
+        // Spracovať pridanie podúlohy z inputu
+        function handleSubtaskInput(event, parentId) {
+            if (event.key === 'Enter') {
+                const text = event.target.value.trim();
+                if (text) {
+                    addSubtask(parentId, text);
+                    event.target.value = '';
+                    toggleSubtaskInput(parentId);
+                }
+            } else if (event.key === 'Escape') {
+                event.target.value = '';
+                toggleSubtaskInput(parentId);
+            }
+        }
+
+        // Spočítať progress podúloh
+        function getSubtaskProgress(subtasks) {
+            if (!subtasks || subtasks.length === 0) return '';
+            const completed = subtasks.filter(s => s.completed).length;
+            return ` (${completed}/${subtasks.length})`;
         }
 
         // Vykresliť aktivity
         function renderActivities() {
             const list = document.getElementById('activitiesList');
-            const completed = activities.filter(a => a.completed).length;
-            const total = activities.length;
+            let totalTasks = 0;
+            let completedTasks = 0;
             
-            list.innerHTML = activities.map(activity => `
-                <div class="activity-item ${activity.completed ? 'completed' : ''}" onclick="toggleActivity(${activity.id})">
-                    <div class="activity-checkbox">
-                        ${activity.completed ? '✓' : ''}
+            list.innerHTML = activities.map(activity => {
+                const subtasks = activity.subtasks || [];
+                const completedSubtasks = subtasks.filter(s => s.completed).length;
+                
+                // Počítanie úloh
+                totalTasks += 1 + subtasks.length;
+                completedTasks += (activity.completed ? 1 : 0) + completedSubtasks;
+                
+                const subtasksHtml = subtasks.map(subtask => `
+                    <div class="activity-item sub-activity ${subtask.completed ? 'completed' : ''}" onclick="toggleActivity(${subtask.id}, true, ${activity.id})">
+                        <div class="activity-checkbox">
+                            ${subtask.completed ? '✓' : ''}
+                        </div>
+                        <div class="activity-text">${subtask.text}</div>
+                        <div class="activity-actions">
+                            <button class="delete-btn" onclick="event.stopPropagation(); deleteItem(${subtask.id}, true, ${activity.id})">🗑️</button>
+                        </div>
                     </div>
-                    <div class="activity-text">${activity.text}</div>
-                    <button class="delete-btn" onclick="event.stopPropagation(); deleteActivity(${activity.id})">🗑️</button>
-                </div>
-            `).join('');
+                `).join('');
+
+                return `
+                    <div class="activity-group">
+                        <div class="activity-item main-activity ${activity.completed ? 'completed' : ''}" onclick="toggleActivity(${activity.id})">
+                            <div class="activity-checkbox">
+                                ${activity.completed ? '✓' : ''}
+                            </div>
+                            <div class="activity-text">
+                                ${activity.text}
+                                <span class="sub-progress">${getSubtaskProgress(subtasks)}</span>
+                            </div>
+                            <div class="activity-actions">
+                                <button class="add-subtask-btn" onclick="event.stopPropagation(); toggleSubtaskInput(${activity.id})">+ Podúloha</button>
+                                <button class="delete-btn" onclick="event.stopPropagation(); deleteItem(${activity.id})">🗑️</button>
+                            </div>
+                        </div>
+                        <div class="subtask-input" id="subtask-input-${activity.id}">
+                            <input 
+                                type="text" 
+                                id="subtask-field-${activity.id}"
+                                placeholder="Pridať podúlohu... (Enter na pridanie, Esc na zrušenie)"
+                                onkeydown="handleSubtaskInput(event, ${activity.id})"
+                                maxlength="80"
+                            >
+                        </div>
+                        ${subtasksHtml}
+                    </div>
+                `;
+            }).join('');
             
             // Aktualizovať progress bar a štatistiky
-            const progress = total > 0 ? (completed / total) * 100 : 0;
+            const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
             document.getElementById('progressFill').style.width = `${progress}%`;
-            document.getElementById('statsText').textContent = `Dokončené: ${completed}/${total} aktivít`;
+            document.getElementById('statsText').textContent = `Dokončené: ${completedTasks}/${totalTasks} úloh`;
         }
 
         // Enter key support
@@ -345,10 +567,7 @@
             const today = now.toDateString();
             
             if (lastResetDate !== today) {
-                activities = activities.map(activity => ({
-                    ...activity,
-                    completed: false
-                }));
+                activities = resetCompletedStatus(activities);
                 lastResetDate = today;
                 saveData();
                 renderActivities();
@@ -367,11 +586,43 @@
         // Pridať základné aktivity pri prvom spustení
         if (activities.length === 0) {
             activities = [
-                { id: 1, text: 'Ranná hygiena', completed: false },
-                { id: 2, text: 'Zdravá raňajky', completed: false },
-                { id: 3, text: '30 minút cvičenia', completed: false },
-                { id: 4, text: 'Prečítať 20 strán knihy', completed: false },
-                { id: 5, text: 'Večerná prechádzka', completed: false }
+                { 
+                    id: 1, 
+                    text: 'Ranná rutina', 
+                    completed: false,
+                    subtasks: [
+                        { id: 11, text: 'Sprcha a hygiena', completed: false },
+                        { id: 12, text: 'Obliecť sa', completed: false }
+                    ]
+                },
+                { 
+                    id: 2, 
+                    text: 'Zdravé stravovanie', 
+                    completed: false,
+                    subtasks: [
+                        { id: 21, text: 'Zdravé raňajky', completed: false },
+                        { id: 22, text: 'Obed s množstvom zeleniny', completed: false },
+                        { id: 23, text: 'Večera do 19:00', completed: false }
+                    ]
+                },
+                { 
+                    id: 3, 
+                    text: 'Fyzická aktivita', 
+                    completed: false,
+                    subtasks: [
+                        { id: 31, text: '20 minút cvičenia', completed: false },
+                        { id: 32, text: 'Prechádzka na čerstvom vzduchu', completed: false }
+                    ]
+                },
+                { 
+                    id: 4, 
+                    text: 'Osobný rozvoj', 
+                    completed: false,
+                    subtasks: [
+                        { id: 41, text: 'Prečítať 15 strán knihy', completed: false },
+                        { id: 42, text: '10 minút meditácie', completed: false }
+                    ]
+                }
             ];
             saveData();
             renderActivities();
