@@ -97,6 +97,11 @@
             transform: translateY(-2px);
         }
         
+        .refresh-btn {
+            background: #28a745 !important;
+            margin-left: 10px;
+        }
+        
         .activities-list {
             display: flex;
             flex-direction: column;
@@ -311,6 +316,7 @@
         <div class="add-activity">
             <input type="text" id="activityInput" placeholder="Pridať novú aktivitu..." maxlength="100">
             <button onclick="addActivity()">Pridať</button>
+            <button class="refresh-btn" onclick="refreshProgress()">Obnoviť</button>
         </div>
         
         <div class="activities-list" id="activitiesList">
@@ -322,73 +328,115 @@
         </div>
         
         <div class="reset-info">
-            ⏰ Všetky označenia sa automaticky vynulujú každý deň o polnoci
+            ⏰ Všetky označenia sa automaticky vynulujú každý deň o polnoci<br>
+            📊 Progress je zdieľaný - všetci vidia rovnaké označenia
         </div>
     </div>
 
     <script>
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzpwr1leYjRZml3ZOqcN6MQDv9WyMPLBFF7DKwGjPeHqegbiIYXfNl9HvezWbQ17B4Q/exec';
+        // Google Sheets konfigurácia
+        const SHEET_ID = '1aCEJH-OUCGY9SCUVm0iZ9kUHiQh9d0zkdZUXyTC-fww';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx0DAXivrugpEPNPixUVr_XkGmUPJdhHtpwL8m04Z4vPK5EMTdTt-7T6r800fd97Rww/exec';
+        
+        // CSV URLs pre všetky hárky
+        const CSV_URLS = {
+            progress: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=956487294`,
+            aktivity: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1250175948`,
+            uzivatelia: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=374696941`,
+            chat: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1366855813`,
+            achievements: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=776987860`,
+            templates: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1612081420`
+        };
         
         let activities = [];
         let lastResetDate = null;
 
-        // Načítať dáta zo Google Sheets
-        async function loadData() {
+        // Načítať dáta z konkrétneho hárka
+        async function loadSheetData(sheetName) {
             try {
-                // Načítať z Google Sheets
-                const response = await fetch(GOOGLE_SCRIPT_URL);
-                const sheetData = await response.json();
+                const csvUrl = CSV_URLS[sheetName.toLowerCase()];
+                if (!csvUrl) {
+                    throw new Error(`Neznámy hárok: ${sheetName}`);
+                }
                 
-                // Spracovať dáta z Google Sheets
+                console.log(`Načítavam ${sheetName} z:`, csvUrl);
+                const response = await fetch(csvUrl);
+                const csvText = await response.text();
+                
+                // Parsovať CSV - lepšie čistenie
+                const lines = csvText.split('\n');
+                const data = lines.slice(1).filter(line => line.trim()).map(line => {
+                    return line.split(',').map(cell => 
+                        cell.replace(/"/g, '').replace(/\r/g, '').replace(/\n/g, '').trim()
+                    );
+                });
+                
+                console.log(`${sheetName} dáta:`, data);
+                return data;
+                
+            } catch (error) {
+                console.error(`Chyba pri načítaní ${sheetName}:`, error);
+                return [];
+            }
+        }
+
+        // Načítať dáta zo všetkých hárkov
+        async function loadAllData() {
+            try {
+                console.log('Načítavam dáta zo všetkých hárkov...');
+                
+                const [progressData, aktivitaData, uzivateliaData] = await Promise.all([
+                    loadSheetData('progress'),
+                    loadSheetData('aktivity'), 
+                    loadSheetData('uzivatelia')
+                ]);
+                
+                return {
+                    progress: progressData,
+                    aktivity: aktivitaData,
+                    uzivatelia: uzivateliaData
+                };
+                
+            } catch (error) {
+                console.error('Chyba pri načítaní všetkých dát:', error);
+                return null;
+            }
+        }
+
+        // Spracovať dáta zo Sheets
+        function processSheetData(sheetData) {
+            try {
                 const today = new Date().toDateString();
+                console.log('Dnes:', today);
+                
                 const todayData = sheetData.filter(row => {
                     if (row.length < 4) return false;
-                    const rowDate = new Date(row[0]).toDateString();
+                    
+                    // Parsovať dátum v slovenskom formáte (DD.M.YYYY)
+                    const dateStr = row[0];
+                    if (!dateStr) return false;
+                    
+                    // Extrahovať dátum z formátu "17.9.2025 20:57:02"
+                    const datePart = dateStr.split(' ')[0]; // "17.9.2025"
+                    const [day, month, year] = datePart.split('.');
+                    const rowDate = new Date(year, month - 1, day).toDateString();
+                    
+                    console.log('Porovnávam dátumy:', rowDate, '===', today);
                     return rowDate === today;
                 });
                 
-                // Vytvorenie základných aktivít ak neexistujú
-                activities = [
-                    { 
-                        id: 1, 
-                        text: 'Benco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 11, text: 'Kliky 60', completed: false },
-                            { id: 12, text: 'Drepy 40', completed: false },
-                            { id: 13, text: 'Dychove cvicenie', completed: false },
-                            { id: 14, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 2, 
-                        text: 'Mito', 
-                        completed: false,
-                        subtasks: [
-                            { id: 21, text: 'Kliky 60', completed: false },
-                            { id: 22, text: 'Drepy 40', completed: false },
-                            { id: 23, text: 'Dychove cvicenie', completed: false },
-                            { id: 24, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 3, 
-                        text: 'Maco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 31, text: 'Kliky 60', completed: false },
-                            { id: 32, text: 'Drepy 40', completed: false },
-                            { id: 33, text: 'Dychove cvicenie', completed: false },
-                            { id: 34, text: 'Volna aktivita', completed: false }
-                        ]
-                    }
-                ];
+                console.log('Dnešné dáta:', todayData);
+                
+                // Vytvorenie základných aktivít
+                createDefaultActivities();
                 
                 // Aplikovať dnes dokončené aktivity z Google Sheets
                 todayData.forEach(row => {
                     const osoba = row[1];
                     const aktivita = row[2];
-                    const dokoncene = row[3] === 'Áno';
+                    const dokoncene = row[3] === 'TRUE' || row[3] === 'true' || row[3] === true;
+                    
+                    console.log('Spracovávam:', osoba, aktivita, dokoncene);
                     
                     if (!dokoncene) return;
                     
@@ -398,6 +446,7 @@
                             activity.subtasks.forEach(subtask => {
                                 if (subtask.text === aktivita) {
                                     subtask.completed = true;
+                                    console.log('Označené:', osoba, aktivita);
                                 }
                             });
                         }
@@ -405,49 +454,106 @@
                 });
                 
                 lastResetDate = today;
-            } catch (error) {
-                console.error('Chyba pri načítaní dát:', error);
-                // Fallback na lokálne dáta
-                const savedActivities = JSON.parse(localStorage.getItem('dailyActivities') || '[]');
-                const savedResetDate = localStorage.getItem('lastResetDate');
-                const today = new Date().toDateString();
+                renderActivities();
                 
-                if (savedResetDate !== today) {
-                    activities = resetCompletedStatus(savedActivities);
-                    lastResetDate = today;
-                    saveData();
-                } else {
-                    activities = savedActivities;
-                    lastResetDate = savedResetDate;
-                }
+            } catch (error) {
+                console.error('Chyba pri spracovaní dát:', error);
+                createDefaultActivities();
+                renderActivities();
             }
         }
 
-        function resetCompletedStatus(activitiesArray) {
-            return activitiesArray.map(activity => ({
-                ...activity,
-                completed: false,
-                subtasks: activity.subtasks ? activity.subtasks.map(subtask => ({
-                    ...subtask,
-                    completed: false
-                })) : []
-            }));
+        // Vytvoriť základné aktivity (fallback)
+        function createDefaultActivities() {
+            activities = [
+                { 
+                    id: 1, 
+                    text: 'Benco', 
+                    completed: false,
+                    subtasks: [
+                        { id: 11, text: 'Kliky 60', completed: false },
+                        { id: 12, text: 'Drepy 40', completed: false },
+                        { id: 13, text: 'Dychove cvicenie', completed: false },
+                        { id: 14, text: 'Volna aktivita', completed: false }
+                    ]
+                },
+                { 
+                    id: 2, 
+                    text: 'Mito', 
+                    completed: false,
+                    subtasks: [
+                        { id: 21, text: 'Kliky 60', completed: false },
+                        { id: 22, text: 'Drepy 40', completed: false },
+                        { id: 23, text: 'Dychove cvicenie', completed: false },
+                        { id: 24, text: 'Volna aktivita', completed: false }
+                    ]
+                },
+                { 
+                    id: 3, 
+                    text: 'Maco', 
+                    completed: false,
+                    subtasks: [
+                        { id: 31, text: 'Kliky 60', completed: false },
+                        { id: 32, text: 'Drepy 40', completed: false },
+                        { id: 33, text: 'Dychove cvicenie', completed: false },
+                        { id: 34, text: 'Volna aktivita', completed: false }
+                    ]
+                }
+            ];
         }
 
-        // Uložiť do Google Sheets
+        // Vytvoriť aktivity zo Sheets dát
+        function createActivitiesFromSheets(aktivitaData, uzivateliaData) {
+            try {
+                console.log('Vytváram aktivity zo Sheets dát...');
+                console.log('Aktivity dáta:', aktivitaData);
+                console.log('Používatelia dáta:', uzivateliaData);
+                
+                activities = [];
+                
+                // Najprv vytvoríme hlavné aktivity (používateľov)
+                const hlavneAktivity = aktivitaData.filter(row => row[2] === 'hlavna');
+                
+                hlavneAktivity.forEach(row => {
+                    const id = parseInt(row[0]);
+                    const nazov = row[1];
+                    
+                    // Nájsť podúlohy pre túto hlavnú aktivitu
+                    const podulohy = aktivitaData
+                        .filter(subRow => subRow[2] === 'poduloha' && subRow[3] == id)
+                        .map(subRow => ({
+                            id: parseInt(subRow[0]),
+                            text: subRow[1],
+                            completed: false
+                        }));
+                    
+                    activities.push({
+                        id: id,
+                        text: nazov,
+                        completed: false,
+                        subtasks: podulohy
+                    });
+                    
+                    console.log(`Vytvorená aktivita: ${nazov} s ${podulohy.length} podúlohami`);
+                });
+                
+                console.log('Finálne aktivity:', activities);
+                
+            } catch (error) {
+                console.error('Chyba pri vytváraní aktivít zo Sheets:', error);
+                createDefaultActivities();
+            }
+        }
+
+        // Uložiť do Google Sheets (cez GET requesty)
         async function saveToGoogleSheets(osoba, aktivita, dokoncene) {
             try {
-                await fetch(GOOGLE_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        osoba: osoba,
-                        aktivita: aktivita,
-                        dokoncene: dokoncene
-                    })
-                });
+                console.log('Ukladám do Google Sheets:', osoba, aktivita, dokoncene);
+                const url = `${GOOGLE_SCRIPT_URL}?osoba=${encodeURIComponent(osoba)}&aktivita=${encodeURIComponent(aktivita)}&dokoncene=${dokoncene}`;
+                console.log('URL pre zápis:', url);
+                const response = await fetch(url);
+                const result = await response.text();
+                console.log('Odpoveď z Google Sheets:', result);
             } catch (error) {
                 console.error('Chyba pri ukladaní do Google Sheets:', error);
             }
@@ -469,6 +575,26 @@
                 day: 'numeric' 
             };
             document.getElementById('currentDate').textContent = today.toLocaleDateString('sk-SK', options);
+        }
+
+        // Obnoviť progress zo servera
+        async function refreshProgress() {
+            console.log('Obnovujem progress aj aktivity...');
+            
+            // Načítať všetky dáta znova
+            const allData = await loadAllData();
+            
+            if (allData) {
+                console.log('Dáta obnovené:', allData);
+                
+                // Znovu vytvoriť aktivity zo Sheets
+                createActivitiesFromSheets(allData.aktivity, allData.uzivatelia);
+                
+                // Aplikovať progress
+                processSheetData(allData.progress);
+                
+                console.log('Aktivity a progress obnovené');
+            }
         }
 
         // Pridať novú aktivitu
@@ -545,6 +671,7 @@
                     ? activities.find(a => a.id === parentId).subtasks.find(s => s.id === id).completed
                     : activities.find(a => a.id === id).completed;
                 
+                console.log('Označujem aktivitu:', changedPerson, changedActivity, isCompleted);
                 await saveToGoogleSheets(changedPerson, changedActivity, isCompleted);
             }
             
@@ -675,69 +802,30 @@
             }
         });
 
-        // Automatický reset o polnoci
-        function checkMidnightReset() {
-            const now = new Date();
-            const today = now.toDateString();
-            
-            if (lastResetDate !== today) {
-                activities = resetCompletedStatus(activities);
-                lastResetDate = today;
-                saveData();
-                renderActivities();
-                displayDate();
-            }
-        }
-
-        // Kontrola každú minútu
-        setInterval(checkMidnightReset, 60000);
-
-        // Inicializácia
+        // Inicializácia - nová verzia s všetkými dátami
         async function init() {
-            await loadData();
+            console.log('Spúšťam aplikáciu s novou architektúrou...');
             displayDate();
-            renderActivities();
-
-            // Pridať základné aktivity pri prvom spustení
-            if (activities.length === 0) {
-                activities = [
-                    { 
-                        id: 1, 
-                        text: 'Benco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 11, text: 'Kliky 60', completed: false },
-                            { id: 12, text: 'Drepy 40', completed: false },
-                            { id: 13, text: 'Dychove cvicenie', completed: false },
-                            { id: 14, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 2, 
-                        text: 'Mito', 
-                        completed: false,
-                        subtasks: [
-                            { id: 21, text: 'Kliky 60', completed: false },
-                            { id: 22, text: 'Drepy 40', completed: false },
-                            { id: 23, text: 'Dychove cvicenie', completed: false },
-                            { id: 24, text: 'Volna aktivita', completed: false }
-                        ]
-                    },
-                    { 
-                        id: 3, 
-                        text: 'Maco', 
-                        completed: false,
-                        subtasks: [
-                            { id: 31, text: 'Kliky 60', completed: false },
-                            { id: 32, text: 'Drepy 40', completed: false },
-                            { id: 33, text: 'Dychove cvicenie', completed: false },
-                            { id: 34, text: 'Volna aktivita', completed: false }
-                        ]
-                    }
-                ];
-                saveData();
+            
+            // Načítať všetky dáta
+            const allData = await loadAllData();
+            
+            if (allData) {
+                console.log('Všetky dáta načítané:', allData);
+                
+                // Vytvoriť aktivity zo Sheets dát
+                createActivitiesFromSheets(allData.aktivity, allData.uzivatelia);
+                
+                // Spracovať progress dáta (aplikovať dokončené úlohy)
+                processSheetData(allData.progress);
+                
+            } else {
+                console.log('Chyba pri načítaní, používam základné aktivity');
+                createDefaultActivities();
                 renderActivities();
             }
+            
+            console.log('Aplikácia spustená s novou architektúrou');
         }
 
         // Spustiť inicializáciu
